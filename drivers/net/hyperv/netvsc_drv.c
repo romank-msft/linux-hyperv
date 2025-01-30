@@ -2514,6 +2514,11 @@ static int check_dev_is_matching_vf(struct net_device *event_ndev)
 	return 0;
 }
 
+// TODO: add something like
+//
+// ```c
+// dev->use_priv_pages_for_io = new_sc->confidential_external_memory;
+// ```
 static int netvsc_probe(struct hv_device *dev,
 			const struct hv_vmbus_device_id *dev_id)
 {

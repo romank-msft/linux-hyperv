@@ -434,6 +434,10 @@ static int __vmbus_establish_gpadl(struct vmbus_channel *channel,
 	unsigned long flags;
 	int ret = 0;
 
+	// remove log
+	pr_info("[ROMANK] %s: establishing GPADL for %#016llx, confidential external memory %d, confidential ring buffer %d, type: %d\n",
+		__func__, (u64)kbuffer, channel->confidential_external_memory, channel->confidential_ring_buffer, type);
+
 	next_gpadl_handle =
 		(atomic_inc_return(&vmbus_connection.next_gpadl_handle) - 1);
 
@@ -443,20 +447,19 @@ static int __vmbus_establish_gpadl(struct vmbus_channel *channel,
 		return ret;
 	}
 
-	/*
-	 * Set the "decrypted" flag to true for the set_memory_decrypted()
-	 * success case. In the failure case, the encryption state of the
-	 * memory is unknown. Leave "decrypted" as true to ensure the
-	 * memory will be leaked instead of going back on the free list.
-	 */
-	gpadl->decrypted = true;
-	ret = set_memory_decrypted((unsigned long)kbuffer,
-				   PFN_UP(size));
-	if (ret) {
-		dev_warn(&channel->device_obj->device,
-			 "Failed to set host visibility for new GPADL %d.\n",
-			 ret);
-		return ret;
+	if ((!channel->confidential_external_memory && type == HV_GPADL_BUFFER) ||
+		(!channel->confidential_ring_buffer && type == HV_GPADL_RING)) {
+		// remove log
+		pr_info("[ROMANK] %s: decrypting GPADL for %#016llx, confidential %d, type: %d\n",
+			__func__, (u64)kbuffer, channel->confidential_external_memory, type);
+		ret = set_memory_decrypted((unsigned long)kbuffer,
+					PFN_UP(size));
+		if (ret) {
+			dev_warn(&channel->device_obj->device,
+				"Failed to set host visibility for new GPADL %d.\n",
+				ret);
+			return ret;
+		}
 	}
 
 	init_completion(&msginfo->waitevent);
@@ -676,12 +679,12 @@ static int __vmbus_open(struct vmbus_channel *newchannel,
 		goto error_clean_ring;
 
 	err = hv_ringbuffer_init(&newchannel->outbound,
-				 page, send_pages, 0);
+				 page, send_pages, 0, newchannel->confidential_ring_buffer);
 	if (err)
 		goto error_free_gpadl;
 
 	err = hv_ringbuffer_init(&newchannel->inbound, &page[send_pages],
-				 recv_pages, newchannel->max_pkt_size);
+				 recv_pages, newchannel->max_pkt_size, newchannel->confidential_ring_buffer);
 	if (err)
 		goto error_free_gpadl;
 
