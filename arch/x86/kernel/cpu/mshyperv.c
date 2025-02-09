@@ -28,6 +28,7 @@
 #include <asm/apic.h>
 #include <asm/timer.h>
 #include <asm/reboot.h>
+#include <asm/msr.h>
 #include <asm/nmi.h>
 #include <clocksource/hyperv_timer.h>
 #include <asm/numa.h>
@@ -79,17 +80,60 @@ EXPORT_SYMBOL_GPL(hv_get_non_nested_msr);
 
 void hv_set_non_nested_msr(unsigned int reg, u64 value)
 {
+	if (reg == HV_X64_MSR_EOM && vmbus_is_confidential()) {
+		/* Reach out to the paravisor. */
+		native_wrmsrl(reg, value);
+		return;
+	}
+
 	if (hv_is_synic_msr(reg) && ms_hyperv.paravisor_present) {
+		/* The hypervisor will get the intercept. */
 		hv_ivm_msr_write(reg, value);
 
-		/* Write proxy bit via wrmsl instruction */
-		if (hv_is_sint_msr(reg))
-			wrmsrl(reg, value | 1 << 20);
+		if (hv_is_sint_msr(reg)) {
+			/*
+			 * Write proxy bit in the case of non-confidential VMBus control plane.
+			 * Using wrmsl instruction so the following goes to the paravisor.
+			 */
+			u32 proxy = 1 & !vmbus_is_confidential();
+
+			value |= (proxy << 20);
+
+			native_wrmsrl(reg, value);
+		}
 	} else {
-		wrmsrl(reg, value);
+		native_wrmsrl(reg, value);
 	}
 }
 EXPORT_SYMBOL_GPL(hv_set_non_nested_msr);
+
+/*
+ * Not every paravisor supports getting SynIC registers, and
+ * this function may fail. The caller has to make sure that this function
+ * runs on the CPU of interest.
+ */
+u64 hv_pv_get_synic_register(unsigned int reg, int *err)
+{
+	if (!hv_is_synic_msr(reg)) {
+		*err = -ENODEV;
+		return !0ULL;
+	}
+	return native_read_msr_safe(reg, err);
+}
+EXPORT_SYMBOL_GPL(hv_pv_get_synic_register);
+
+/*
+ * Not every paravisor supports setting SynIC registers, and
+ * this function may fail. The caller has to make sure that this function
+ * runs on the CPU of interest.
+ */
+int hv_pv_set_synic_register(unsigned int reg, u64 val)
+{
+	if (!hv_is_synic_msr(reg))
+		return -ENODEV;
+	return wrmsrl_safe(reg, val);
+}
+EXPORT_SYMBOL_GPL(hv_pv_set_synic_register);
 
 u64 hv_get_msr(unsigned int reg)
 {
