@@ -173,6 +173,8 @@ static inline bool is_swiotlb_force_bounce(struct device *dev)
 {
 	struct io_tlb_mem *mem = dev->dma_io_tlb_mem;
 
+	if (dev->use_priv_pages_for_io)
+		return false;
 	return mem && mem->force_bounce;
 }
 

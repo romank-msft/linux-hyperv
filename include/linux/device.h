@@ -827,6 +827,7 @@ struct device {
 #ifdef CONFIG_IOMMU_DMA
 	bool			dma_iommu:1;
 #endif
+	bool			use_priv_pages_for_io:1;
 };
 
 /**
