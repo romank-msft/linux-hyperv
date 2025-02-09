@@ -314,4 +314,6 @@ static inline enum hv_isolation_type hv_get_isolation_type(void)
 }
 #endif /* CONFIG_HYPERV */
 
+bool vmbus_is_confidential(void);
+
 #endif
