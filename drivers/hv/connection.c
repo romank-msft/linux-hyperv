@@ -77,6 +77,8 @@ int vmbus_negotiate_version(struct vmbus_channel_msginfo *msginfo, u32 version)
 	struct vmbus_channel_initiate_contact *msg;
 	unsigned long flags;
 
+	pr_info("%s: VTL %d\n", __func__, ms_hyperv.vtl);
+
 	init_completion(&msginfo->waitevent);
 
 	msg = (struct vmbus_channel_initiate_contact *)msginfo->msg;
