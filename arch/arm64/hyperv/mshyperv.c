@@ -41,22 +41,6 @@ static bool hyperv_detect_via_acpi(void)
 #endif
 }
 
-static bool hyperv_detect_via_smccc(void)
-{
-	struct arm_smccc_res res = {};
-
-	if (arm_smccc_1_1_get_conduit() != SMCCC_CONDUIT_HVC)
-		return false;
-	arm_smccc_1_1_hvc(ARM_SMCCC_VENDOR_HYP_CALL_UID_FUNC_ID, &res);
-	if (res.a0 == SMCCC_RET_NOT_SUPPORTED)
-		return false;
-
-	return res.a0 == ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_0 &&
-		res.a1 == ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_1 &&
-		res.a2 == ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_2 &&
-		res.a3 == ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_3;
-}
-
 static int __init hyperv_init(void)
 {
 	struct hv_get_vp_registers_output	result;
@@ -69,7 +53,7 @@ static int __init hyperv_init(void)
 	 *
 	 * In such cases, do nothing and return success.
 	 */
-	if (!hyperv_detect_via_acpi() && !hyperv_detect_via_smccc())
+	if (!hyperv_detect_via_acpi() && !ARM_SMCCC_HYP_PRESENT(HYPERV))
 		return 0;
 
 	/* Setup the guest ID */

@@ -7,6 +7,11 @@
 
 #include <linux/args.h>
 #include <linux/init.h>
+
+#ifndef __ASSEMBLER__
+#include <linux/uuid.h>
+#endif
+
 #include <uapi/linux/const.h>
 
 /*
@@ -332,6 +337,33 @@ s32 arm_smccc_get_soc_id_version(void);
  * When ARM_SMCCC_ARCH_SOC_ID is not present, returns SMCCC_RET_NOT_SUPPORTED.
  */
 s32 arm_smccc_get_soc_id_revision(void);
+
+#ifndef __ASSEMBLER__
+
+/**
+ * arm_smccc_hyp_present(const uuid_t *hyp_uuid)
+ *
+ * Returns `true` if the hypervisor advertises its presence via SMCCC.
+ *
+ * When the function returns `false`, the caller shall not assume that
+ * there is no hypervisor running. Instead, the caller must fall back to
+ * other approaches if any are available.
+ */
+bool arm_smccc_hyp_present(const uuid_t *hyp_uuid);
+
+#define ARM_SMCCC_HYP_PRESENT(HYP) 								\
+	({															\
+		const u32 uuid_as_dwords[4] = {							\
+			ARM_SMCCC_VENDOR_HYP_UID_ ## HYP ## _REG_0,			\
+			ARM_SMCCC_VENDOR_HYP_UID_ ## HYP ## _REG_1,			\
+			ARM_SMCCC_VENDOR_HYP_UID_ ## HYP ## _REG_2,			\
+			ARM_SMCCC_VENDOR_HYP_UID_ ## HYP ## _REG_3			\
+		};														\
+																\
+		arm_smccc_hyp_present((const uuid_t *)uuid_as_dwords);	\
+	})															\
+
+#endif /* !__ASSEMBLER__ */
 
 /**
  * struct arm_smccc_res - Result from SMC/HVC call
