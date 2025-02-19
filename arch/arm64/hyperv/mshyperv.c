@@ -43,18 +43,12 @@ static bool hyperv_detect_via_acpi(void)
 
 static bool hyperv_detect_via_smccc(void)
 {
-	struct arm_smccc_res res = {};
+	uuid_t hyperv_uuid = HYP_UUID_INIT(ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_0,
+		ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_1,
+		ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_2,
+		ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_3);
 
-	if (arm_smccc_1_1_get_conduit() != SMCCC_CONDUIT_HVC)
-		return false;
-	arm_smccc_1_1_hvc(ARM_SMCCC_VENDOR_HYP_CALL_UID_FUNC_ID, &res);
-	if (res.a0 == SMCCC_RET_NOT_SUPPORTED)
-		return false;
-
-	return res.a0 == ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_0 &&
-		res.a1 == ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_1 &&
-		res.a2 == ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_2 &&
-		res.a3 == ARM_SMCCC_VENDOR_HYP_UID_HYPERV_REG_3;
+	return arm_smccc_hyp_present(&hyperv_uuid);
 }
 
 static int __init hyperv_init(void)
