@@ -910,16 +910,29 @@ static struct irq_domain *hv_pci_of_irq_domain_parent(void)
 		of_node_put(parent);
 	}
 
-	/*
-	 * `domain == NULL` shouldn't happen.
-	 *
-	 * If somehow the code does end up in that state, treat this as a configuration
-	 * issue rather than a hard error, emit a warning, and let the code proceed.
-	 * The NULL parent domain is an acceptable option for the `irq_domain_create_hierarchy`
-	 * function called later.
-	 */
+	return domain;
+}
+
+#endif
+
+#ifdef CONFIG_ACPI
+
+static struct irq_domain *hv_pci_acpi_irq_domain_parent(void)
+{
+	struct irq_domain *domain;
+	acpi_gsi_domain_disp_fn gsi_domain_disp_fn;
+
+	if (acpi_irq_model != ACPI_IRQ_MODEL_GIC)
+		return NULL;
+	gsi_domain_disp_fn = acpi_get_gsi_dispatcher();
+	if (!gsi_domain_disp_fn)
+		return NULL;
+	domain = irq_find_matching_fwnode(gsi_domain_disp_fn(0),
+				     DOMAIN_BUS_ANY);
+
 	if (!domain)
-		WARN_ONCE(1, "No interrupt-parent found, check the DeviceTree data.\n");
+		return NULL;
+
 	return domain;
 }
 
@@ -929,6 +942,7 @@ static int hv_pci_irqchip_init(void)
 {
 	static struct hv_pci_chip_data *chip_data;
 	struct fwnode_handle *fn = NULL;
+	struct irq_domain *irq_domain_parent = NULL;
 	int ret = -ENOMEM;
 
 	chip_data = kzalloc(sizeof(*chip_data), GFP_KERNEL);
@@ -944,29 +958,25 @@ static int hv_pci_irqchip_init(void)
 	 * IRQ domain once enabled, should not be removed since there is no
 	 * way to ensure that all the corresponding devices are also gone and
 	 * no interrupts will be generated.
-	 *
-	 * In the ACPI case, the parent IRQ domain is supplied by the ACPI
-	 * subsystem, and it is the default GSI domain pointing to the GIC.
-	 * Neither is available outside of the ACPI subsystem, cannot avoid
-	 * the messy ifdef below.
-	 * There is apparently no such default in the OF subsystem, and
-	 * `hv_pci_of_irq_domain_parent` finds the parent IRQ domain that
-	 * points to the GIC as well.
-	 * None of these two cases reaches for the MSI parent domain.
 	 */
 #ifdef CONFIG_ACPI
 	if (!acpi_disabled)
-		hv_msi_gic_irq_domain = acpi_irq_create_hierarchy(0, HV_PCI_MSI_SPI_NR,
-			fn, &hv_pci_domain_ops,
-			chip_data);
+		irq_domain_parent = hv_pci_acpi_irq_domain_parent();
 #endif
 #if defined(CONFIG_OF)
-	if (!hv_msi_gic_irq_domain)
-		hv_msi_gic_irq_domain = irq_domain_create_hierarchy(
-			hv_pci_of_irq_domain_parent(), 0, HV_PCI_MSI_SPI_NR,
-			fn, &hv_pci_domain_ops,
-			chip_data);
+	if (!irq_domain_parent)
+		irq_domain_parent = hv_pci_of_irq_domain_parent();
 #endif
+	if (!irq_domain_parent) {
+		WARN_ONCE(1, "Invalid firmware configuration for VMBus interrupts\n");
+		ret = -EINVAL;
+		goto free_chip;
+	}
+
+	hv_msi_gic_irq_domain = irq_domain_create_hierarchy(
+		irq_domain_parent, 0, HV_PCI_MSI_SPI_NR,
+		fn, &hv_pci_domain_ops,
+		chip_data);
 
 	if (!hv_msi_gic_irq_domain) {
 		pr_err("Failed to create Hyper-V arm64 vPCI MSI IRQ domain\n");
