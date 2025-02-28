@@ -10,6 +10,11 @@
 #
 # Normal rules (sorted alphabetically)
 #
+
+/Microsoft/
+/out/
+/build/
+
 .*
 *.a
 *.asn1.[ch]
