@@ -1,0 +1,150 @@
+[PATCH hyperv-next v4 1/6] arm64: hyperv: Use SMCCC to detect hypervisor presence
+    "Arnd Bergmann" <arnd@arndb.de>
+        - Use UUID_INIT
+        <DONE>
+
+    Michael Kelley <mhklinux@outlook.com>
+        > +static bool hyperv_detect_via_acpi(void)
+        > +{
+        > +	if (acpi_disabled)
+        > +		return false;
+        > +#if IS_ENABLED(CONFIG_ACPI)
+        > +	/* Hypervisor ID is only available in ACPI v6+. */
+
+        <DONE>
+        The comment is correct, but to me doesn't tell the full story.
+        I initially wondered why the revision test < 6 was being done,
+        since Hyper-V for ARM64 always provides ACPI 6.x or greater.
+        But the test is needed to catch running in some unknown
+        non-Hyper-V environment that has ACPI 5.x or less. In such a
+        case, it can't be Hyper-V, so just return false instead of testing
+        a bogus hypervisor_id field. Maybe a comment would help
+        explain it to someone like me who was confused. :-)
+
+        > 
+        > +	ms_hyperv.vtl = get_vtl();
+
+        <TODO>
+        The above statement looks like it will fail to compile on
+        arm64 since the get_vtl() function is entirely on the x86
+        side until Patch 3 of this series. As of this Patch 1, there's
+        no declaration of get_vtl() available to arm64.
+
+        > +	/* Report if non-default VTL */
+        > +	if (ms_hyperv.vtl > 0)
+        > +		pr_info("Linux runs in Hyper-V Virtual Trust Level\n");
+
+        <DONE>
+        Could this message include the VTL number as well? In the long
+        run, I think there will be code at non-zero VTLs other than VTL 2.
+
+[PATCH hyperv-next v4 2/6] Drivers: hv: Enable VTL mode for arm64
+    Michael Kelley <mhklinux@outlook.com>
+        >  config HYPERV_VTL_MODE
+        >  	bool "Enable Linux to boot in VTL context"
+        > -	depends on X86_64 && HYPERV
+        > +	depends on (X86 || ARM64)
+
+        <DONE>
+        Any reason to choose "X86" instead of "X86_64"? I can't
+        imagine VTL mode making any sense for 32-bit, but maybe
+        I'm wrong! :-)
+
+[PATCH hyperv-next v4 3/6] Drivers: hv: Provide arch-neutral implementation of get_vtl()
+    Reviewed-by: Michael Kelley <mhklinux@outlook.com>
+
+[PATCH hyperv-next v4 4/6] dt-bindings: microsoft,vmbus: Add GIC and DMA coherence to the example
+    Krzysztof Kozlowski <krzk@kernel.org>: DONE
+        Please confirm that binding was tested on latest dtschema.
+        I fail to see how this is relevant here. This is example only of vmbus.
+        Look how other bindings are done. Drop the example.
+        Use proper defines for known constants.
+
+[PATCH hyperv-next v4 5/6] Drivers: hv: vmbus: Get the IRQ number from DeviceTree
+    Reviewed-by: Michael Kelley <mhklinux@outlook.com>
+
+[PATCH hyperv-next v4 6/6] PCI: hv: Get vPCI MSI IRQ domain from DeviceTree
+    Michael Kelley <mhklinux@outlook.com>
+        <TODO>
+        These changes to rename hv_dev to vmbus_root_device, along with the
+        introduction of hv_get_vmbus_root_device(), seem like a separate
+        patch from the vPCI changes. The rename is definitely needed because
+        "hv_dev" as a symbol is very overloaded. But the rename is "no functional
+        change", and it doesn't touch the pci-hyperv.c file. You don't have a
+        consumer for hv_get_vmbus_root_device() until the vPCI changes, but
+        that seems OK to me to be in the subsequent patch.
+    Bjorn Helgaas <helgaas@kernel.org>: DONE
+        > +	/*
+        > +	 * `domain == NULL` shouldn't happen.
+        > +	 *
+        > +	 * If somehow the code does end up in that state, treat this as a configuration
+        > +	 * issue rather than a hard error, emit a warning, and let the code proceed.
+        > +	 * The NULL parent domain is an acceptable option for the `irq_domain_create_hierarchy`
+        > +	 * function called later.
+
+        The rest of this file fits in 80 columns; please wrap this to match.
+
+        > +	 */
+        > +	if (!domain)
+        > +		WARN_ONCE(1, "No interrupt-parent found, check the DeviceTree data.\n");
+
+        Is there a way to include a hint about what specific part of the
+        devicetree to look at, e.g., the node that lacks a parent?
+
+        > +	return domain;
+        > +}
+        > +
+        > +#endif
+        > +
+        >  static int hv_pci_irqchip_init(void)
+        >  {
+        >  	static struct hv_pci_chip_data *chip_data;
+        > @@ -906,10 +944,29 @@ static int hv_pci_irqchip_init(void)
+        >  	 * IRQ domain once enabled, should not be removed since there is no
+        >  	 * way to ensure that all the corresponding devices are also gone and
+        >  	 * no interrupts will be generated.
+        > +	 *
+        > +	 * In the ACPI case, the parent IRQ domain is supplied by the ACPI
+        > +	 * subsystem, and it is the default GSI domain pointing to the GIC.
+        > +	 * Neither is available outside of the ACPI subsystem, cannot avoid
+        > +	 * the messy ifdef below.
+
+        Add a blank line if you intend a new paragraph here.  Otherwise, wrap
+        to fill 78 columns or so.
+
+        > +	 * There is apparently no such default in the OF subsystem, and
+        > +	 * `hv_pci_of_irq_domain_parent` finds the parent IRQ domain that
+        > +	 * points to the GIC as well.
+
+        And here.
+
+        > +	 * None of these two cases reaches for the MSI parent domain.
+
+        I don't know what "reaches for the MSI parent domain" means.  Neither
+        "searches for"?
+
+        >  	 */
+        > -	hv_msi_gic_irq_domain = acpi_irq_create_hierarchy(0, HV_PCI_MSI_SPI_NR,
+        > -							  fn, &hv_pci_domain_ops,
+        > -							  chip_data);
+        > +#ifdef CONFIG_ACPI
+        > +	if (!acpi_disabled)
+        > +		hv_msi_gic_irq_domain = acpi_irq_create_hierarchy(0, HV_PCI_MSI_SPI_NR,
+        > +			fn, &hv_pci_domain_ops,
+        > +			chip_data);
+        > +#endif
+        > +#if defined(CONFIG_OF)
+        > +	if (!hv_msi_gic_irq_domain)
+        > +		hv_msi_gic_irq_domain = irq_domain_create_hierarchy(
+        > +			hv_pci_of_irq_domain_parent(), 0, HV_PCI_MSI_SPI_NR,
+        > +			fn, &hv_pci_domain_ops,
+        > +			chip_data);
+        > +#endif
+
+        I don't know if acpi_irq_create_hierarchy() is helping or hurting
+        here.  It obscures the fact that the only difference is the first
+        argument to irq_domain_create_hierarchy().  If we could open-code or
+        have a helper to figure out that irq_domain "parent" argument for the
+        ACPI case, then we'd only have one call of
+        irq_domain_create_hierarchy() here and it seems like it might be
+        simpler.
