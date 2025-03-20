@@ -21,7 +21,7 @@ CONFIG_CC_HAS_AUTO_VAR_INIT_PATTERN             policy<{'amd64': '-', 'arm64': '
 CONFIG_CC_HAS_AUTO_VAR_INIT_ZERO                policy<{'amd64': '-', 'arm64': '-'}>
 CONFIG_CC_HAS_AUTO_VAR_INIT_ZERO_BARE           policy<{'amd64': '-', 'arm64': '-'}>
 CONFIG_CC_HAVE_SHADOW_CALL_STACK                policy<{'arm64': '-'}>
-CONFIG_CC_VERSION_TEXT                          policy<{'amd64': '"x86_64-linux-gnu-gcc-11 (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0"', 'arm64': '"aarch64-linux-gnu-gcc-11 (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0"'}>
+CONFIG_CC_VERSION_TEXT                          policy<{'amd64': '"x86_64-linux-gnu-gcc-11 (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0"', 'arm64': '"gcc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0"'}>
 CONFIG_DEBUG_INFO_COMPRESSED_ZSTD               policy<{'amd64': '-', 'arm64': '-'}>
 CONFIG_GCC_ASM_GOTO_OUTPUT_WORKAROUND           policy<{'amd64': 'y', 'arm64': 'y'}>
 CONFIG_GCC_VERSION                              policy<{'amd64': '110400', 'arm64': '110400'}>
@@ -31,3 +31,25 @@ CONFIG_INIT_STACK_NONE                          policy<{'amd64': 'y', 'arm64': '
 CONFIG_KCOV                                     policy<{'amd64': 'n', 'arm64': '-'}>
 CONFIG_LD_VERSION                               policy<{'amd64': '23800', 'arm64': '23800'}>
 CONFIG_SHADOW_CALL_STACK                        policy<{'arm64': '-'}>
+
+CONFIG_ARCH_SUPPORTS_SHADOW_CALL_STACK                              policy<{'arm64': 'y'}>
+CONFIG_CC_HAS_AUTO_VAR_INIT_PATTERN                                 policy<{'armhf': 'y', 'ppc64el': 'y', 'riscv64': 'y', 's390x': 'y', 'amd64': '-', 'arm64': 'y'}>
+CONFIG_CC_HAS_AUTO_VAR_INIT_ZERO                                    policy<{'armhf': 'y', 'ppc64el': 'y', 'riscv64': 'y', 's390x': 'y', 'amd64': '-', 'arm64': 'y'}>
+CONFIG_CC_HAS_AUTO_VAR_INIT_ZERO_BARE                               policy<{'armhf': 'y', 'ppc64el': 'y', 'riscv64': 'y', 's390x': 'y', 'amd64': '-', 'arm64': 'y'}>
+CONFIG_CC_HAVE_SHADOW_CALL_STACK                                    policy<{'arm64': 'n'}>
+CONFIG_DEBUG_INFO_BTF                                               policy<{'amd64': 'y', 'arm64': '-', 'armhf': 'n', 'ppc64el': 'y', 'riscv64': 'y', 's390x': '-'}>
+CONFIG_DEBUG_INFO_BTF_MODULES                                       policy<{'amd64': 'y', 'arm64': '-', 'ppc64el': 'y', 'riscv64': 'y', 's390x': '-'}>
+CONFIG_DEBUG_INFO_COMPRESSED_ZSTD                                   policy<{'armhf': 'n', 'ppc64el': 'n', 'riscv64': 'n', 's390x': 'n', 'amd64': '-', 'arm64': 'n'}>
+CONFIG_GCC_ASM_GOTO_OUTPUT_WORKAROUND                               policy<{'amd64': 'y', 'arm64': '-'}>
+CONFIG_INIT_STACK_ALL_PATTERN                                       policy<{'armhf': 'n', 'ppc64el': 'n', 'riscv64': 'n', 's390x': 'n', 'amd64': '-', 'arm64': 'n'}>
+CONFIG_INIT_STACK_ALL_ZERO                                          policy<{'armhf': 'y', 'ppc64el': 'y', 'riscv64': 'y', 's390x': 'y', 'amd64': '-', 'arm64': 'n'}>
+CONFIG_KCOV                                                         policy<{'armhf': 'n', 'ppc64el': 'n', 'riscv64': 'n', 's390x': 'n', 'amd64': 'n', 'arm64': 'y'}>
+CONFIG_MODULE_ALLOW_BTF_MISMATCH                                    policy<{'amd64': 'n', 'arm64': '-', 'ppc64el': 'n', 'riscv64': 'n', 's390x': 'n'}>
+CONFIG_PAHOLE_HAS_LANG_EXCLUDE                                      policy<{'amd64': 'y', 'arm64': '-', 'armhf': 'y', 'ppc64el': 'y', 'riscv64': 'y', 's390x': 'y'}>
+CONFIG_PAHOLE_HAS_SPLIT_BTF                                         policy<{'amd64': 'y', 'arm64': '-', 'armhf': 'y', 'ppc64el': 'y', 'riscv64': 'y', 's390x': 'y'}>
+CONFIG_PROBE_EVENTS_BTF_ARGS                                        policy<{'amd64': 'y', 'arm64': '-', 'ppc64el': 'y', 'riscv64': 'y', 's390x': 'y'}>
+CONFIG_SHADOW_CALL_STACK                                            policy<{'arm64': '-'}>
+
+CONFIG_CC_HAVE_SHADOW_CALL_STACK                policy<{'arm64': 'y'}>
+CONFIG_KCOV                                     policy<{'armhf': 'n', 'ppc64el': 'n', 'riscv64': 'n', 's390x': 'n', 'amd64': 'n', 'arm64': 'n'}>
+CONFIG_SHADOW_CALL_STACK                        policy<{'arm64': 'n'}>

@@ -1,4 +1,4 @@
-linux-azure (6.8.0-1026.31) noble; urgency=medium
+linux-azure (6.8.0-1026.31+test00) noble; urgency=medium
 
   * noble/linux-azure: 6.8.0-1026.31 -proposed tracker (LP: #2102445)
 
