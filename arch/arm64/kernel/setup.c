@@ -333,8 +333,11 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 	cpu_uninstall_idmap();
 
 	xen_early_init();
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
+
 	efi_init();
 
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	if (!efi_enabled(EFI_BOOT)) {
 		if ((u64)_text % MIN_KIMG_ALIGN)
 			pr_warn(FW_BUG "Kernel image misaligned at boot, please fix your bootloader!");
@@ -342,24 +345,32 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 			   FW_BUG "Booted with MMU enabled!");
 	}
 
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	arm64_memblock_init();
 
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	paging_init();
 
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	acpi_table_upgrade();
 
 	/* Parse the ACPI tables for possible boot-time configuration */
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	acpi_boot_table_init();
 
 	if (acpi_disabled)
 		unflatten_device_tree();
 
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	bootmem_init();
 
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	kasan_init();
 
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	request_standard_resources();
 
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	early_ioremap_reset();
 
 	if (acpi_disabled)
@@ -367,8 +378,11 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 	else
 		psci_acpi_init();
 
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	init_bootcpu_ops();
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	smp_init_cpus();
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	smp_build_mpidr_hash();
 
 #ifdef CONFIG_ARM64_SW_TTBR0_PAN
@@ -386,6 +400,7 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 			"This indicates a broken bootloader or old kernel\n",
 			boot_args[1], boot_args[2], boot_args[3]);
 	}
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 }
 
 static inline bool cpu_can_disable(unsigned int cpu)

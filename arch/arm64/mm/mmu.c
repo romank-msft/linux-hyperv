@@ -26,6 +26,8 @@
 #include <linux/set_memory.h>
 #include <linux/kfence.h>
 
+#include <linux/time_it.h>
+
 #include <asm/barrier.h>
 #include <asm/cputype.h>
 #include <asm/fixmap.h>
@@ -105,8 +107,8 @@ static phys_addr_t __init early_pgtable_alloc(int shift)
 	phys_addr_t phys;
 	void *ptr;
 
-	phys = memblock_phys_alloc_range(PAGE_SIZE, PAGE_SIZE, 0,
-					 MEMBLOCK_ALLOC_NOLEAKTRACE);
+	TIME_IT("phys = memblock_phys_alloc_range", phys = memblock_phys_alloc_range(PAGE_SIZE, PAGE_SIZE, 0,
+					 MEMBLOCK_ALLOC_NOLEAKTRACE));
 	if (!phys)
 		panic("Failed to allocate page table page\n");
 
@@ -117,7 +119,7 @@ static phys_addr_t __init early_pgtable_alloc(int shift)
 	 */
 	ptr = pte_set_fixmap(phys);
 
-	memset(ptr, 0, PAGE_SIZE);
+	TIME_IT("memset(ptr, 0, PAGE_SIZE)", memset(ptr, 0, PAGE_SIZE));
 
 	/*
 	 * Implicit barriers also ensure the zeroed page is visible to the page
@@ -207,8 +209,8 @@ static void alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 		if (flags & NO_EXEC_MAPPINGS)
 			pmdval |= PMD_TABLE_PXN;
 		BUG_ON(!pgtable_alloc);
-		pte_phys = pgtable_alloc(PAGE_SHIFT);
-		__pmd_populate(pmdp, pte_phys, pmdval);
+		TIME_IT("pte_phys = pgtable_alloc(PAGE_SHIFT)", pte_phys = pgtable_alloc(PAGE_SHIFT));
+		TIME_IT("__pmd_populate", __pmd_populate(pmdp, pte_phys, pmdval));
 		pmd = READ_ONCE(*pmdp);
 	}
 	BUG_ON(pmd_bad(pmd));
@@ -223,7 +225,7 @@ static void alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
 		    (flags & NO_CONT_MAPPINGS) == 0)
 			__prot = __pgprot(pgprot_val(prot) | PTE_CONT);
 
-		init_pte(pmdp, addr, next, phys, __prot);
+		TIME_IT("init_pte", init_pte(pmdp, addr, next, phys, __prot));
 
 		phys += next - addr;
 	} while (addr = next, addr != end);
@@ -245,7 +247,7 @@ static void init_pmd(pud_t *pudp, unsigned long addr, unsigned long end,
 		/* try section mapping first */
 		if (((addr | next | phys) & ~PMD_MASK) == 0 &&
 		    (flags & NO_BLOCK_MAPPINGS) == 0) {
-			pmd_set_huge(pmdp, phys, prot);
+			TIME_IT("pmd_set_huge", pmd_set_huge(pmdp, phys, prot));
 
 			/*
 			 * After the PMD entry has been populated once, we
@@ -254,8 +256,8 @@ static void init_pmd(pud_t *pudp, unsigned long addr, unsigned long end,
 			BUG_ON(!pgattr_change_is_safe(pmd_val(old_pmd),
 						      READ_ONCE(pmd_val(*pmdp))));
 		} else {
-			alloc_init_cont_pte(pmdp, addr, next, phys, prot,
-					    pgtable_alloc, flags);
+			TIME_IT("alloc_init_cont_pte", alloc_init_cont_pte(pmdp, addr, next, phys, prot,
+					    pgtable_alloc, flags));
 
 			BUG_ON(pmd_val(old_pmd) != 0 &&
 			       pmd_val(old_pmd) != READ_ONCE(pmd_val(*pmdp)));
@@ -301,7 +303,7 @@ static void alloc_init_cont_pmd(pud_t *pudp, unsigned long addr,
 		    (flags & NO_CONT_MAPPINGS) == 0)
 			__prot = __pgprot(pgprot_val(prot) | PTE_CONT);
 
-		init_pmd(pudp, addr, next, phys, __prot, pgtable_alloc, flags);
+		TIME_IT("init_pmd", init_pmd(pudp, addr, next, phys, __prot, pgtable_alloc, flags));
 
 		phys += next - addr;
 	} while (addr = next, addr != end);
@@ -342,8 +344,8 @@ static void alloc_init_pud(pgd_t *pgdp, unsigned long addr, unsigned long end,
 		if (pud_sect_supported() &&
 		   ((addr | next | phys) & ~PUD_MASK) == 0 &&
 		    (flags & NO_BLOCK_MAPPINGS) == 0) {
-			pud_set_huge(pudp, phys, prot);
-
+			TIME_IT("pud_set_huge", pud_set_huge(pudp, phys, prot));
+			
 			/*
 			 * After the PUD entry has been populated once, we
 			 * only allow updates to the permission attributes.
@@ -351,8 +353,8 @@ static void alloc_init_pud(pgd_t *pgdp, unsigned long addr, unsigned long end,
 			BUG_ON(!pgattr_change_is_safe(pud_val(old_pud),
 						      READ_ONCE(pud_val(*pudp))));
 		} else {
-			alloc_init_cont_pmd(pudp, addr, next, phys, prot,
-					    pgtable_alloc, flags);
+			TIME_IT("alloc_init_cont_pmd", alloc_init_cont_pmd(pudp, addr, next, phys, prot,
+					    pgtable_alloc, flags));
 
 			BUG_ON(pud_val(old_pud) != 0 &&
 			       pud_val(old_pud) != READ_ONCE(pud_val(*pudp)));
@@ -385,8 +387,8 @@ static void __create_pgd_mapping_locked(pgd_t *pgdir, phys_addr_t phys,
 
 	do {
 		next = pgd_addr_end(addr, end);
-		alloc_init_pud(pgdp, addr, next, phys, prot, pgtable_alloc,
-			       flags);
+		TIME_IT("alloc_init_pud", alloc_init_pud(pgdp, addr, next, phys, prot, pgtable_alloc,
+			       flags));
 		phys += next - addr;
 	} while (pgdp++, addr = next, addr != end);
 }
@@ -492,8 +494,8 @@ static void update_mapping_prot(phys_addr_t phys, unsigned long virt,
 static void __init __map_memblock(pgd_t *pgdp, phys_addr_t start,
 				  phys_addr_t end, pgprot_t prot, int flags)
 {
-	__create_pgd_mapping(pgdp, start, __phys_to_virt(start), end - start,
-			     prot, early_pgtable_alloc, flags);
+	TIME_IT("__map_memblock", __create_pgd_mapping(pgdp, start, __phys_to_virt(start), end - start,
+			     prot, early_pgtable_alloc, flags));
 }
 
 void __init mark_linear_text_alias_ro(void)
@@ -570,6 +572,8 @@ static void __init map_mem(pgd_t *pgdp)
 	int flags = NO_EXEC_MAPPINGS;
 	u64 i;
 
+	pr_info("%s: **** LINE %d\n", __func__,  __LINE__);
+
 	/*
 	 * Setting hierarchical PXNTable attributes on table entries covering
 	 * the linear region is only possible if it is guaranteed that no table
@@ -580,6 +584,7 @@ static void __init map_mem(pgd_t *pgdp)
 	BUILD_BUG_ON(pgd_index(direct_map_end - 1) == pgd_index(direct_map_end));
 
 	early_kfence_pool = arm64_kfence_alloc_pool();
+	pr_info("%s: **** LINE %d\n", __func__,  __LINE__);	
 
 	if (can_set_direct_map())
 		flags |= NO_BLOCK_MAPPINGS | NO_CONT_MAPPINGS;
@@ -590,7 +595,8 @@ static void __init map_mem(pgd_t *pgdp)
 	 * So temporarily mark them as NOMAP to skip mappings in
 	 * the following for-loop
 	 */
-	memblock_mark_nomap(kernel_start, kernel_end - kernel_start);
+	memblock_mark_nomap(kernel_start, kernel_end - kernel_start);	
+	pr_info("%s: **** LINE %d\n", __func__,  __LINE__);
 
 	/* map all the memory banks */
 	for_each_mem_range(i, &start, &end) {
@@ -604,6 +610,7 @@ static void __init map_mem(pgd_t *pgdp)
 		__map_memblock(pgdp, start, end, pgprot_tagged(PAGE_KERNEL),
 			       flags);
 	}
+	pr_info("%s: **** LINE %d\n", __func__,  __LINE__);	
 
 	/*
 	 * Map the linear alias of the [_stext, __init_begin) interval
@@ -615,10 +622,12 @@ static void __init map_mem(pgd_t *pgdp)
 	 * Note that contiguous mappings cannot be remapped in this way,
 	 * so we should avoid them here.
 	 */
-	__map_memblock(pgdp, kernel_start, kernel_end,
+	 __map_memblock(pgdp, kernel_start, kernel_end,
 		       PAGE_KERNEL, NO_CONT_MAPPINGS);
+	pr_info("%s: **** LINE %d\n", __func__,  __LINE__);	
 	memblock_clear_nomap(kernel_start, kernel_end - kernel_start);
 	arm64_kfence_map_pool(early_kfence_pool, pgdp);
+	pr_info("%s: **** LINE %d\n", __func__,  __LINE__);
 }
 
 void mark_rodata_ro(void)
@@ -738,7 +747,7 @@ static void __init map_kernel(pgd_t *pgdp)
 	 */
 	if (arm64_early_this_cpu_has_bti())
 		text_prot = __pgprot_modify(text_prot, PTE_GP, PTE_GP);
-
+	
 	/*
 	 * Only rodata will be remapped with different permissions later on,
 	 * all other segments are allowed to use contiguous mappings.
@@ -763,7 +772,7 @@ static void __init create_idmap(void)
 	u64 size = __pa_symbol(__idmap_text_end) - start;
 	pgd_t *pgd = idmap_pg_dir;
 	u64 pgd_phys;
-
+	
 	/* check if we need an additional level of translation */
 	if (VA_BITS < 48 && idmap_t0sz < (64 - VA_BITS_MIN)) {
 		pgd_phys = early_pgtable_alloc(PAGE_SHIFT);
@@ -773,7 +782,7 @@ static void __init create_idmap(void)
 	}
 	__create_pgd_mapping(pgd, start, start, size, PAGE_KERNEL_ROX,
 			     early_pgtable_alloc, 0);
-
+	
 	if (IS_ENABLED(CONFIG_UNMAP_KERNEL_AT_EL0)) {
 		extern u32 __idmap_kpti_flag;
 		u64 pa = __pa_symbol(&__idmap_kpti_flag);
@@ -793,21 +802,24 @@ void __init paging_init(void)
 	extern pgd_t init_idmap_pg_dir[];
 
 	idmap_t0sz = 63UL - __fls(__pa_symbol(_end) | GENMASK(VA_BITS_MIN - 1, 0));
-
+	pr_info("%s: **** LINE %d\n", __func__,  __LINE__);
 	map_kernel(pgdp);
+	pr_info("%s: **** LINE %d\n", __func__,  __LINE__);
 	map_mem(pgdp);
-
+	pr_info("%s: **** LINE %d\n", __func__,  __LINE__);
 	pgd_clear_fixmap();
+	pr_info("%s: **** LINE %d\n", __func__,  __LINE__);
 
 	cpu_replace_ttbr1(lm_alias(swapper_pg_dir), init_idmap_pg_dir);
 	init_mm.pgd = swapper_pg_dir;
-
+	
 	memblock_phys_free(__pa_symbol(init_pg_dir),
 			   __pa_symbol(init_pg_end) - __pa_symbol(init_pg_dir));
-
+			   
 	memblock_allow_resize();
-
+	
 	create_idmap();
+	pr_info("%s: **** LINE %d\n", __func__,  __LINE__);
 }
 
 #ifdef CONFIG_MEMORY_HOTPLUG

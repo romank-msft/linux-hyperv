@@ -1,4 +1,4 @@
-linux-azure-6.8 (6.8.0-1026.31~22.04.1+test00) jammy; urgency=medium
+linux-azure-6.8 (6.8.0-1026.31~22.04.1+test12) jammy; urgency=medium
 
   * jammy/linux-azure-6.8: 6.8.0-1026.31~22.04.1 -proposed tracker
     (LP: #2102443)

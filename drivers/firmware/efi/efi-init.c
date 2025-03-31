@@ -215,11 +215,14 @@ void __init efi_init(void)
 	struct efi_memory_map_data data;
 	u64 efi_system_table;
 
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
+
 	/* Grab UEFI information placed in FDT by stub */
 	efi_system_table = efi_get_fdt_params(&data);
 	if (!efi_system_table)
 		return;
 
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	if (efi_memmap_init_early(&data) < 0) {
 		/*
 		* If we are booting via UEFI, the UEFI memory map is the only
@@ -229,6 +232,7 @@ void __init efi_init(void)
 		panic("Unable to map EFI memory map.\n");
 	}
 
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	WARN(efi.memmap.desc_version != 1,
 	     "Unexpected EFI_MEMORY_DESCRIPTOR version %ld",
 	      efi.memmap.desc_version);
@@ -238,6 +242,7 @@ void __init efi_init(void)
 		return;
 	}
 
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	efi_set_secure_boot(efi_get__secure_boot());
 
 #ifdef CONFIG_LOCK_DOWN_IN_SECURE_BOOT
@@ -245,21 +250,29 @@ void __init efi_init(void)
 		security_lock_kernel_down("EFI Secure Boot mode", LOCKDOWN_INTEGRITY_MAX);
 #endif
 
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	reserve_regions();
 	/*
 	 * For memblock manipulation, the cap should come after the memblock_add().
 	 * And now, memblock is fully populated, it is time to do capping.
 	 */
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	early_init_dt_check_for_usable_mem_range();
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	efi_find_mirror();
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	efi_esrt_init();
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	efi_mokvar_table_init();
 
 	memblock_reserve(data.phys_map & PAGE_MASK,
 			 PAGE_ALIGN(data.size + (data.phys_map & ~PAGE_MASK)));
 
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 	if (IS_ENABLED(CONFIG_X86) ||
 	    IS_ENABLED(CONFIG_SYSFB) ||
 	    IS_ENABLED(CONFIG_EFI_EARLYCON))
 		init_screen_info();
+
+	pr_info("%s: **** LINE %d\n", __func__, __LINE__);
 }
