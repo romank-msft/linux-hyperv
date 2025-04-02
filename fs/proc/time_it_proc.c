@@ -18,6 +18,23 @@ atomic_long_t time_taken_depth;
 #define TIME_IT_CHUNKS ((u64)(((u64)sizeof(time_taken_stor))/(TIME_IT_CHUNK_SIZE)))
 #define TIME_IT_CHUNK_ITEMS ((u64)TIME_TAKEN_RECORD_COUNT/TIME_IT_CHUNKS)
 
+u64 time_taken_overhead;
+
+static  __attribute__((__noinline__)) void __time_it_overhead(void)
+{
+}
+
+static  __attribute__((__noinline__)) void time_it_overhead(void)
+{
+    TIME_IT("time_it_overhead", __time_it_overhead());
+}
+
+void time_it_init_overhead(void)
+{
+    TIME_IT("__OVERHEAD__", time_it_overhead());
+    time_taken_overhead = time_taken_stor[0].cycles;
+}
+
 /**********************************************************************************************************/
 
 static int time_it_proc_show(struct seq_file *t, void *v)
@@ -49,6 +66,7 @@ fs_initcall(proc_time_it_init);
 
 static int proc_time_it_stat_show(struct seq_file *t, void *v)
 {
+    seq_printf(t, "%#llx cycles of overhead\n", time_taken_overhead);
     seq_printf(t, "%#llx overflows\n", (u64)atomic_long_read(&time_taken_overflows));
     seq_printf(t, "%#llx entries\n", (u64)atomic_long_read(&time_taken_next));
     seq_printf(t, "%#llx storage size, bytes\n", (u64)sizeof(time_taken_stor));

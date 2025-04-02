@@ -19,6 +19,7 @@ extern struct time_taken time_taken_stor[TIME_TAKEN_RECORD_COUNT];
 extern atomic_long_t time_taken_next;
 extern atomic_long_t time_taken_overflows;
 extern atomic_long_t time_taken_depth;
+extern u64 time_taken_overhead;
 
 #define TIME_IT(LABEL, X) \
 	{ \
@@ -36,9 +37,11 @@ extern atomic_long_t time_taken_depth;
             time_taken_stor[__IDX].depth = atomic_long_fetch_inc_relaxed(&time_taken_depth); \
             __TIMERCNT = __arch_counter_get_cntvct_stable(); \
 			X; \
-            time_taken_stor[__IDX].cycles = __arch_counter_get_cntvct_stable() - __TIMERCNT; \
+            time_taken_stor[__IDX].cycles = __arch_counter_get_cntvct_stable() - __TIMERCNT - time_taken_overhead; \
             atomic_long_fetch_dec_relaxed(&time_taken_depth); \
         } while (0); \
 	} \
 
 #endif
+
+extern void time_it_init_overhead(void);

@@ -173,11 +173,13 @@ static void init_pte(pmd_t *pmdp, unsigned long addr, unsigned long end,
 {
 	pte_t *ptep;
 
-	ptep = pte_set_fixmap_offset(pmdp, addr);
+	TIME_IT("ptep = pte_set_fixmap_offset(pmdp, addr)", ptep = pte_set_fixmap_offset(pmdp, addr));
 	do {
-		pte_t old_pte = READ_ONCE(*ptep);
+		pte_t old_pte;
+		
+		TIME_IT("old_pte = READ_ONCE(*ptep)", old_pte = READ_ONCE(*ptep));
 
-		set_pte(ptep, pfn_pte(__phys_to_pfn(phys), prot));
+		TIME_IT("set_pte", set_pte(ptep, pfn_pte(__phys_to_pfn(phys), prot)));
 
 		/*
 		 * After the PTE entry has been populated once, we
@@ -189,7 +191,7 @@ static void init_pte(pmd_t *pmdp, unsigned long addr, unsigned long end,
 		phys += PAGE_SIZE;
 	} while (ptep++, addr += PAGE_SIZE, addr != end);
 
-	pte_clear_fixmap();
+	TIME_IT("pte_clear_fixmap()", pte_clear_fixmap());
 }
 
 static void alloc_init_cont_pte(pmd_t *pmdp, unsigned long addr,
@@ -800,6 +802,8 @@ void __init paging_init(void)
 {
 	pgd_t *pgdp = pgd_set_fixmap(__pa_symbol(swapper_pg_dir));
 	extern pgd_t init_idmap_pg_dir[];
+
+	time_it_init_overhead();
 
 	idmap_t0sz = 63UL - __fls(__pa_symbol(_end) | GENMASK(VA_BITS_MIN - 1, 0));
 	pr_info("%s: **** LINE %d\n", __func__,  __LINE__);
