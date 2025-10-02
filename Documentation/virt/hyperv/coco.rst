@@ -323,14 +323,10 @@ paravisor. Please refer to
 for more information about the OpenHCL paravisor.
 
 A guest that is running with a paravisor must determine at runtime if
-Confidential VMBus is supported by the current paravisor. It may do that by
-first trying to establish a Confidential VMBus connection with the paravisor
-using standard mechanisms where the memory remains encrypted. If this succeeds,
-then the guest can proceed to use Confidential VMBus. If it fails, then the
-guest must fallback to establishing a non-Confidential VMBus connection with
-the Hyper-V host. The x86_64-specific approach may rely on the CPUID
-Virtualization stack leaf; the ARM64 implementation is expected to support
-the Confidential VMBus unconditionally when running the ARM CC guests.
+Confidential VMBus is supported by the current paravisor.The x86_64-specific
+approach relies on the CPUID Virtualization Stack leaf; the ARM64 implementation
+is expected to support the Confidential VMBus unconditionally when running
+the ARM CCA guests.
 
 Confidential VMBus is a characteristic of the VMBus connection as a whole,
 and of each VMBus channel that is created. When a Confidential VMBus

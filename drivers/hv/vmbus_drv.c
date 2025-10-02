@@ -1349,7 +1349,7 @@ static void vmbus_message_sched(struct hv_per_cpu_context *hv_cpu, void *message
 	}
 }
 
-void vmbus_isr(void)
+static void vmbus_isr(void)
 {
 	struct hv_per_cpu_context *hv_cpu
 		= this_cpu_ptr(hv_context.cpu_context);
@@ -1478,7 +1478,7 @@ static int vmbus_bus_init(void)
 	 * Cache the value as getting it involves a VM exit on x86(_64), and
 	 * doing that on each VP while initializing SynIC's wastes time.
 	 */
-	is_confidential = hv_confidential_vmbus_available();
+	is_confidential = ms_hyperv.confidential_vmbus_available;
 	if (is_confidential)
 		pr_info("Establishing connection to the confidential VMBus\n");
 	hv_para_set_sint_proxy(!is_confidential);

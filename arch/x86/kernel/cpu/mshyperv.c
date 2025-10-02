@@ -39,15 +39,11 @@
 bool hv_nested;
 struct ms_hyperv_info ms_hyperv;
 
-#define HYPERV_SINT_PROXY_ENABLE	BIT(20)
-#define HYPERV_SINT_PROXY_DISABLE	0
-
 /*
- * When running with the paravisor, proxy the synthetic interrupts from the host
- * by default
+ * When running with the paravisor, controls proxying the synthetic interrupts
+ * from the host
  */
-u64 hv_para_sint_proxy = HYPERV_SINT_PROXY_ENABLE;
-EXPORT_SYMBOL_GPL(hv_para_sint_proxy);
+static bool hv_para_sint_proxy;
 
 /* Used in modules via hv_do_hypercall(): see arch/x86/include/asm/mshyperv.h */
 bool hyperv_paravisor_present __ro_after_init;
@@ -94,8 +90,12 @@ void hv_set_non_nested_msr(unsigned int reg, u64 value)
 		hv_ivm_msr_write(reg, value);
 
 		/* Using wrmsrq so the following goes to the paravisor. */
-		if (hv_is_sint_msr(reg))
-			native_wrmsrq(reg, value | hv_para_sint_proxy);
+		if (hv_is_sint_msr(reg)) {
+			union hv_synic_sint sint = { .as_uint64 = value };
+
+			sint.proxy = hv_para_sint_proxy;
+			native_wrmsrq(reg, sint.as_uint64);
+		}
 	} else {
 		native_wrmsrq(reg, value);
 	}
@@ -103,71 +103,32 @@ void hv_set_non_nested_msr(unsigned int reg, u64 value)
 EXPORT_SYMBOL_GPL(hv_set_non_nested_msr);
 
 /*
- * Detect if the confidential VMBus is available.
- */
-bool hv_confidential_vmbus_available(void)
-{
-	u32 eax;
-
-	eax = cpuid_eax(HYPERV_CPUID_VIRT_STACK_INTERFACE);
-	if (eax != HYPERV_VS_INTERFACE_EAX_SIGNATURE)
-		return false;
-
-	eax = cpuid_eax(HYPERV_CPUID_VIRT_STACK_PROPERTIES);
-
-	/*
-	 * The paravisor may set the bit in the hardware confidential VMs.
-	 */
-	return eax & HYPERV_VS_PROPERTIES_EAX_CONFIDENTIAL_VMBUS_AVAILABLE;
-}
-
-/*
  * Enable or disable proxying synthetic interrupts
  * to the paravisor.
  */
 void hv_para_set_sint_proxy(bool enable)
 {
-	hv_para_sint_proxy =
-		enable ? HYPERV_SINT_PROXY_ENABLE : HYPERV_SINT_PROXY_DISABLE;
+	hv_para_sint_proxy = enable;
 }
 
 /*
- * Attempt to get the SynIC register value from the paravisor.
- *
- * Not all paravisors support reading SynIC registers, so this function
- * may fail. The register for the SynIC of the running CPU is accessed.
- *
- * Writes the SynIC register value into the memory pointed by val,
- * and ~0ULL is on failure.
- *
- * Returns -ENODEV if the MSR is not a SynIC register, or another error
- * code if getting the MSR fails (meaning the paravisor doesn't support
- * relaying VMBus communucations).
+ * Get the SynIC register value from the paravisor.
  */
-int hv_para_get_synic_register(unsigned int reg, u64 *val)
+u64 hv_para_get_synic_register(unsigned int reg)
 {
-	if (!ms_hyperv.paravisor_present || !hv_is_synic_msr(reg))
-		return -ENODEV;
-	return native_read_msr_safe(reg, val);
+	if (WARN_ON(!ms_hyperv.paravisor_present || !hv_is_synic_msr(reg)))
+		return ~0ULL;
+	return native_read_msr(reg);
 }
 
 /*
- * Attempt to set the SynIC register value with the paravisor.
- *
- * Not all paravisors support setting SynIC registers, so this function
- * may fail. The register for the SynIC of the running CPU is accessed.
- *
- * Sets the register to the value supplied.
- *
- * Returns: -ENODEV if the MSR is not a SynIC register, or another error
- * code if writing to the MSR fails (meaning the paravisor doesn't support
- * relaying VMBus communucations).
+ * Set the SynIC register value with the paravisor.
  */
-int hv_para_set_synic_register(unsigned int reg, u64 val)
+void hv_para_set_synic_register(unsigned int reg, u64 val)
 {
-	if (!ms_hyperv.paravisor_present || !hv_is_synic_msr(reg))
-		return -ENODEV;
-	return native_write_msr_safe(reg, val);
+	if (WARN_ON(!ms_hyperv.paravisor_present || !hv_is_synic_msr(reg)))
+		return;
+	native_write_msr(reg, val);
 }
 
 u64 hv_get_msr(unsigned int reg)
@@ -514,7 +475,7 @@ EXPORT_SYMBOL_GPL(hv_get_hypervisor_version);
 
 static void __init ms_hyperv_init_platform(void)
 {
-	int hv_max_functions_eax;
+	int hv_max_functions_eax, eax;
 
 #ifdef CONFIG_PARAVIRT
 	pv_info.name = "Hyper-V";
@@ -548,6 +509,19 @@ static void __init ms_hyperv_init_platform(void)
 		hv_nested = true;
 		pr_info("Hyper-V: running on a nested hypervisor\n");
 	}
+
+	/*
+	 * There is no check against the max function for HYPERV_CPUID_VIRT_STACK_* CPUID
+	 * leaves as the hypervisor doesn't handle them. Even a nested root partition (L2
+	 * root) will not get them because the nested (L1) hypervisor filters them out.
+	 * These are handled through intercept processing by the Windows Hyper-V stack
+	 * or the paravisor.
+	 */
+	eax = cpuid_eax(HYPERV_CPUID_VIRT_STACK_PROPERTIES);
+	ms_hyperv.confidential_vmbus_available =
+		eax & HYPERV_VS_PROPERTIES_EAX_CONFIDENTIAL_VMBUS_AVAILABLE;
+	ms_hyperv.msi_ext_dest_id =
+		eax & HYPERV_VS_PROPERTIES_EAX_EXTENDED_IOAPIC_RTE;
 
 	if (ms_hyperv.features & HV_ACCESS_FREQUENCY_MSRS &&
 	    ms_hyperv.misc_features & HV_FEATURE_FREQUENCY_MSRS_AVAILABLE) {
@@ -748,21 +722,10 @@ static bool __init ms_hyperv_x2apic_available(void)
  * pci-hyperv host bridge.
  *
  * Note: for a Hyper-V root partition, this will always return false.
- * The hypervisor doesn't expose these HYPERV_CPUID_VIRT_STACK_* cpuids by
- * default, they are implemented as intercepts by the Windows Hyper-V stack.
- * Even a nested root partition (L2 root) will not get them because the
- * nested (L1) hypervisor filters them out.
  */
 static bool __init ms_hyperv_msi_ext_dest_id(void)
 {
-	u32 eax;
-
-	eax = cpuid_eax(HYPERV_CPUID_VIRT_STACK_INTERFACE);
-	if (eax != HYPERV_VS_INTERFACE_EAX_SIGNATURE)
-		return false;
-
-	eax = cpuid_eax(HYPERV_CPUID_VIRT_STACK_PROPERTIES);
-	return eax & HYPERV_VS_PROPERTIES_EAX_EXTENDED_IOAPIC_RTE;
+	return ms_hyperv.msi_ext_dest_id;
 }
 
 #ifdef CONFIG_AMD_MEM_ENCRYPT

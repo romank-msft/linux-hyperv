@@ -716,27 +716,19 @@ u64 __weak hv_tdx_hypercall(u64 control, u64 param1, u64 param2)
 }
 EXPORT_SYMBOL_GPL(hv_tdx_hypercall);
 
-bool __weak hv_confidential_vmbus_available(void)
-{
-	return false;
-}
-EXPORT_SYMBOL_GPL(hv_confidential_vmbus_available);
-
 void __weak hv_para_set_sint_proxy(bool enable)
 {
 }
 EXPORT_SYMBOL_GPL(hv_para_set_sint_proxy);
 
-int __weak hv_para_get_synic_register(unsigned int reg, u64 *val)
+u64 __weak hv_para_get_synic_register(unsigned int reg)
 {
-	*val = ~0ULL;
-	return -ENODEV;
+	return ~0ULL;
 }
 EXPORT_SYMBOL_GPL(hv_para_get_synic_register);
 
-int __weak hv_para_set_synic_register(unsigned int reg, u64 val)
+void __weak hv_para_set_synic_register(unsigned int reg, u64 val)
 {
-	return -ENODEV;
 }
 EXPORT_SYMBOL_GPL(hv_para_set_synic_register);
 

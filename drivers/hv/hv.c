@@ -339,66 +339,42 @@ static void hv_hyp_synic_enable_interrupts(void)
 	hv_set_msr(HV_MSR_SCONTROL, sctrl.as_uint64);
 }
 
-/*
- * The paravisor might not support proxying SynIC, and this
- * function may fail.
- */
-static int hv_para_synic_enable_regs(unsigned int cpu)
+static void hv_para_synic_enable_regs(unsigned int cpu)
 {
-	int err;
 	union hv_synic_simp simp;
 	union hv_synic_siefp siefp;
 	struct hv_per_cpu_context *hv_cpu
 		= per_cpu_ptr(hv_context.cpu_context, cpu);
 
 	/* Setup the Synic's message page with the paravisor. */
-	err = hv_para_get_synic_register(HV_MSR_SIMP, &simp.as_uint64);
-	if (err)
-		return err;
+	simp.as_uint64 = hv_para_get_synic_register(HV_MSR_SIMP);
 	simp.simp_enabled = 1;
 	simp.base_simp_gpa = virt_to_phys(hv_cpu->para_synic_message_page)
 			>> HV_HYP_PAGE_SHIFT;
-	err = hv_para_set_synic_register(HV_MSR_SIMP, simp.as_uint64);
-	if (err)
-		return err;
+	hv_para_set_synic_register(HV_MSR_SIMP, simp.as_uint64);
 
 	/* Setup the Synic's event page with the paravisor. */
-	err = hv_para_get_synic_register(HV_MSR_SIEFP, &siefp.as_uint64);
-	if (err)
-		return err;
+	siefp.as_uint64 = hv_para_get_synic_register(HV_MSR_SIEFP);
 	siefp.siefp_enabled = 1;
 	siefp.base_siefp_gpa = virt_to_phys(hv_cpu->para_synic_event_page)
 			>> HV_HYP_PAGE_SHIFT;
-	return hv_para_set_synic_register(HV_MSR_SIEFP, siefp.as_uint64);
+	hv_para_set_synic_register(HV_MSR_SIEFP, siefp.as_uint64);
 }
 
-static int hv_para_synic_enable_interrupts(void)
+static void hv_para_synic_enable_interrupts(void)
 {
 	union hv_synic_scontrol sctrl;
-	int err;
 
 	/* Enable the global synic bit */
-	err = hv_para_get_synic_register(HV_MSR_SCONTROL, &sctrl.as_uint64);
-	if (err)
-		return err;
+	sctrl.as_uint64 = hv_para_get_synic_register(HV_MSR_SCONTROL);
 	sctrl.enable = 1;
-
-	return hv_para_set_synic_register(HV_MSR_SCONTROL, sctrl.as_uint64);
+	hv_para_set_synic_register(HV_MSR_SCONTROL, sctrl.as_uint64);
 }
 
 int hv_synic_init(unsigned int cpu)
 {
-	int err;
-
-	/*
-	 * The paravisor may not support the confidential VMBus,
-	 * check on that first.
-	 */
-	if (vmbus_is_confidential()) {
-		err = hv_para_synic_enable_regs(cpu);
-		if (err)
-			goto fail;
-	}
+	if (vmbus_is_confidential())
+		hv_para_synic_enable_regs(cpu);
 
 	/*
 	 * The SINT is set in hv_hyp_synic_enable_regs() by calling
@@ -412,28 +388,14 @@ int hv_synic_init(unsigned int cpu)
 	 */
 
 	hv_hyp_synic_enable_regs(cpu);
-	if (vmbus_is_confidential()) {
-		err = hv_para_synic_enable_interrupts();
-		if (err)
-			goto fail;
-	} else
+	if (vmbus_is_confidential())
+		hv_para_synic_enable_interrupts();
+	else
 		hv_hyp_synic_enable_interrupts();
 
 	hv_stimer_legacy_init(cpu, VMBUS_MESSAGE_SINT);
 
 	return 0;
-
-fail:
-	/*
-	 * The failure may only come from enabling the paravisor SynIC.
-	 * That in turn means that the confidential VMBus cannot be used
-	 * which is not an error: the setup will be re-tried with the
-	 * non-confidential VMBus.
-	 *
-	 * We also don't bother attempting to reset the paravisor registers
-	 * as something isn't working there anyway.
-	 */
-	return err;
 }
 
 void hv_hyp_synic_disable_regs(unsigned int cpu)
@@ -498,42 +460,26 @@ static void hv_hyp_synic_disable_interrupts(void)
 
 static void hv_para_synic_disable_regs(unsigned int cpu)
 {
-	/*
-	 * When a get/set register error is encountered, the function
-	 * returns as the paravisor may not support these registers.
-	 */
-	int err;
 	union hv_synic_simp simp;
 	union hv_synic_siefp siefp;
 
 	/* Disable SynIC's message page in the paravisor. */
-	err = hv_para_get_synic_register(HV_MSR_SIMP, &simp.as_uint64);
-	if (err)
-		return;
+	simp.as_uint64 = hv_para_get_synic_register(HV_MSR_SIMP);
 	simp.simp_enabled = 0;
-
-	err = hv_para_set_synic_register(HV_MSR_SIMP, simp.as_uint64);
-	if (err)
-		return;
+	hv_para_set_synic_register(HV_MSR_SIMP, simp.as_uint64);
 
 	/* Disable SynIC's event page in the paravisor. */
-	err = hv_para_get_synic_register(HV_MSR_SIEFP, &siefp.as_uint64);
-	if (err)
-		return;
+	siefp.as_uint64 = hv_para_get_synic_register(HV_MSR_SIEFP);
 	siefp.siefp_enabled = 0;
-
 	hv_para_set_synic_register(HV_MSR_SIEFP, siefp.as_uint64);
 }
 
 static void hv_para_synic_disable_interrupts(void)
 {
 	union hv_synic_scontrol sctrl;
-	int err;
 
 	/* Disable the global synic bit */
-	err = hv_para_get_synic_register(HV_MSR_SCONTROL, &sctrl.as_uint64);
-	if (err)
-		return;
+	sctrl.as_uint64 = hv_para_get_synic_register(HV_MSR_SCONTROL);
 	sctrl.enable = 0;
 	hv_para_set_synic_register(HV_MSR_SCONTROL, sctrl.as_uint64);
 }
