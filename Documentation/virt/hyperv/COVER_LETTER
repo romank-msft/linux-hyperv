@@ -1,0 +1,221 @@
+Howdy folks,
+
+Enclosed is the 7th version of the patch series with all patches approved,
+and the delta against the 6th version is few non-functional changes
+suggested by Michael.
+
+Since v5, the fallback mechanism for establishing the VMBus connection
+is no longer used as the availability of the Confidential VMBus is
+now indicated by a bit in the Virtualization Stack (VS) CPUID leaf.
+The v6 patch series breaks that out into a separate patch seizing
+the opportunity to refactor the code that uses the same leaf.
+That is obviously an x86_64 specific technique. On ARM64, the
+Confidential VMBus is expected to be required once support for ARM CCA is
+implemented.
+
+TLDR; is that these patches are for the Hyper-V guests, and the patches
+allow to keep data flowing from physical devices into the guests encrypted
+at the CPU level so that neither the root/host partition nor the hypervisor
+can access the data being processed (they only "see" the encrypted/garbled
+data) unless the guest decides to share it. The changes are backward compatible
+with older systems, and their full potential is realized on hardware that
+supports memory encryption.
+
+These features also require running a paravisor, such as
+OpenHCL (https://github.com/microsoft/openvmm) used in Azure. Another
+implementation of the functionality available in this patch set is
+available in the Hyper-V UEFI: https://github.com/microsoft/mu_msvm.
+
+A more detailed description of the patches follows.
+
+The guests running on Hyper-V can be confidential where the memory and the
+register content are encrypted, provided that the hardware supports that
+(currently support for AMD SEV-SNP and Intel TDX is implemented) and the guest
+is capable of using these features. The confidential guests cannot be
+introspected by the host nor the hypervisor without the guest sharing the
+memory contents upon doing which the memory is decrypted.
+
+In the confidential guests, neither the host nor the hypervisor need to be
+trusted, and the guests processing sensitive data can take advantage of that.
+
+Not trusting the host and the hypervisor (removing them from the Trusted
+Computing Base aka TCB) necessitates that the method of communication
+between the host and the guest be changed. Here is the data flow for a
+conventional and the confidential VMBus connections (`C` stands for the
+client or VSC, `S` for the server or VSP, the `DEVICE` is a physical one,
+might be with multiple virtual functions):
+
+1. Without the paravisor the devices are connected to the host, and the
+host provides the device emulation or translation to the guest:
+
+  +---- GUEST ----+       +----- DEVICE ----+        +----- HOST -----+
+  |               |       |                 |        |                |
+  |               |       |                 |        |                |
+  |               |       |                 ==========                |
+  |               |       |                 |        |                |
+  |               |       |                 |        |                |
+  |               |       |                 |        |                |
+  +----- C -------+       +-----------------+        +------- S ------+
+         ||                                                   ||
+         ||                                                   ||
+  +------||------------------ VMBus --------------------------||------+
+  |                     Interrupts, MMIO                              |
+  +-------------------------------------------------------------------+
+
+2. With the paravisor, the devices are connected to the paravisor, and
+the paravisor provides the device emulation or translation to the guest.
+The guest doesn't communicate with the host directly, and the guest
+communicates with the paravisor via the VMBus. The host is not trusted
+in this model, and the paravisor is trusted:
+
+  +---- GUEST --------------- VTL0 ------+               +-- DEVICE --+
+  |                                      |               |            |
+  | +- PARAVISOR --------- VTL2 -----+   |               |            |
+  | |     +-- VMBus Relay ------+    ====+================            |
+  | |     |   Interrupts, MMIO  |    |   |               |            |
+  | |     +-------- S ----------+    |   |               +------------+
+  | |               ||               |   |
+  | +---------+     ||               |   |
+  | |  Linux  |     ||    OpenHCL    |   |
+  | |  kernel |     ||               |   |
+  | +---- C --+-----||---------------+   |
+  |       ||        ||                   |
+  +-------++------- C -------------------+               +------------+
+          ||                                             |    HOST    |
+          ||                                             +---- S -----+
+  +-------||----------------- VMBus ---------------------------||-----+
+  |                     Interrupts, MMIO                              |
+  +-------------------------------------------------------------------+
+
+Note that in the second case the guest doesn't need to share the memory
+with the host as it communicates only with the paravisor within their
+partition boundary. That is precisely the raison d'etre and the value
+proposition of this patch series: equip the confidential guest to use
+private (encrypted) memory and rely on the paravisor when this is
+available to be more secure.
+
+An implementation of the VMBus relay that offers the Confidential VMBus
+channels is available in the OpenVMM project as a part of the OpenHCL
+paravisor. Please refer to
+
+  * https://openvmm.dev/, and
+  * https://github.com/microsoft/openvmm
+
+for more information about the OpenHCL paravisor. A VMBus client
+that can work with the Confidential VMBus is available in the
+open-source Hyper-V UEFI: https://github.com/microsoft/mu_msvm.
+
+I'd like to thank the following people for their help with this
+patch series:
+
+* Dexuan for help with validation and the fruitful discussions,
+* Easwar for reviewing the refactoring of the page allocating and
+  freeing in `hv.c`,
+* John and Sven for the design,
+* Mike for helping to avoid pitfalls when dealing with the GFP flags,
+* Sven for blazing the trail and implementing the design in few
+  codebases.
+
+I made sure to validate the patch series on
+
+    {TrustedLaunch(x86_64), OpenHCL} x
+    {SNP(x86_64), TDX(x86_64), No hardware isolation, No paravisor} x
+    {VMBus 5.0, VMBus 6.0} x
+    {arm64, x86_64}.
+
+[V7]
+    - Removed the sentence about the fallible functions for setting/getting
+      registers of the paravisor SynIC. That was no longer valid in v6.
+    - Fixed grammar and whitespace in the patch for Documentation.
+      **Thank you, Michael!**
+
+    - Fixed the warning produced when building for i386 w/o Hyper-V.
+      **Thank you, kernel robot!**
+      **Thank you, Michael!**
+
+[V6] https://lore.kernel.org/linux-hyperv/20251003222710.6257-1-romank@linux.microsoft.com/
+    - Rebased onto the latest hyperv-next tree.
+
+    - Gave another thought to the fallible routines for getting and setting
+      SynIC registers via paravisor introduced in the patch series, and after
+      Michael's feedback decided to make them infallible as now we have the
+      CPUID bit to indicate the availability of the Confidential VMBus. That
+      simplifies the code and makes it clearer and more robust - a reflection
+      of the improvements in the design throught the patch series iterations.
+    - Removed the sentence discussing the fallback mechanism in the Documentation
+      as it is no longer relevant.
+      **Thank you, Michael!**
+
+    - Avoided using the macro'es for (un)masking the proxy bit thanks to
+      `union hv_synic_sint`.
+      **Thank you, Wei!**
+
+[V5] https://lore.kernel.org/linux-hyperv/20250828010557.123869-1-romank@linux.microsoft.com/
+    - Rebased onto the latest hyperv-next tree.
+
+    - Fixed build issues with the configs provided by the kernel robot.
+      **Thank you, kernel robot!**
+
+    - Fixed the potential NULL deref in a failure path.
+      **Thank you, Michael!**
+
+    - Removed the added blurb from the vmbus_drv.c with taxonomy of Hyper-V VMs
+      that was providing reasons for the trade-offs in the fallback code. That
+      code is no longer needed.
+
+[V4] https://lore.kernel.org/linux-hyperv/20250714221545.5615-1-romank@linux.microsoft.com/
+    - Rebased the patch series on top of the latest hyperv-next branch,
+      applying changes as needed.
+
+    - Fixed typos and clarifications all around the patch series.
+    - Added clarifications in the patch 7 for `ms_hyperv.paravisor_present && !vmbus_is_confidential()`
+      and using hypercalls vs SNP or TDX specific protocols.
+      **Thank you, Alok!**
+
+    - Trim the Documentation changes to 80 columns.
+      **Thank you, Randy!**
+
+    - Make sure adhere to the RST format, actually built the PDF docs
+      and made sure the layout was correct.
+    **Thank you, Jon!**
+
+    - Better section order in Documentation.
+    - Fixed the commit descriptions where suggested.
+    - Moved EOI/EOM signaling for the confidential VMBus to the specialized function.
+    - Removed the unused `cpu` parameters.
+    - Clarified comments in the `hv_per_cpu_context` struct
+    - Explicitly test for NULL and only call `iounmap()` if non-NULL instead of
+      using `munmap()`.
+    - Don't deallocate SynIC pages in the CPU online and offline paths.
+    - Made sure the post page needs to be allocated for the future.
+    - Added comments to describe trade-offs.
+    **Thank you, Michael!**
+
+[V3] https://lore.kernel.org/linux-hyperv/20250604004341.7194-1-romank@linux.microsoft.com/
+    - The patch series is rebased on top of the latest hyperv-next branch.
+    - Reworked the "wiring" diagram in the cover letter, added links to the
+      OpenVMM project and the OpenHCL paravisor.
+
+    - More precise wording in the comments and clearer code.
+    **Thank you, Alok!**
+
+    - Reworked the documentation patch.
+    - Split the patchset into much more granular patches.
+    - Various fixes and improvements throughout the patch series.
+    **Thank you, Michael!**
+
+[V2] https://lore.kernel.org/linux-hyperv/20250511230758.160674-1-romank@linux.microsoft.com/
+    - The patch series is rebased on top of the latest hyperv-next branch.
+  
+    - Better wording in the commit messages and the Documentation.
+    **Thank you, Alok and Wei!**
+
+    - Removed the patches 5 and 6 concerning turning bounce buffering off from
+      the previous version of the patch series as they were found to be
+      architecturally unsound. The value proposition of the patch series is not
+      diminished by this removal: these patches were an optimization and only for
+      the storage (for the simplicity sake) but not for the network. These changes
+      might be proposed in the future again after revolving the issues.
+    ** Thanks you, Christoph, Dexuan, Dan, Michael, James, Robin! **
+
+[V1] https://lore.kernel.org/linux-hyperv/20250409000835.285105-1-romank@linux.microsoft.com/
